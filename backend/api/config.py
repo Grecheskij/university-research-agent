@@ -55,7 +55,7 @@ class BackendSettings:
             ),
             app_version=os.getenv("BACKEND_APP_VERSION", "0.2.0"),
             frontend_origins=origins,
-            api_key=os.getenv("BACKEND_API_KEY"),
+            api_key=os.getenv("BACKEND_API_KEY") or os.getenv("API_KEY"),
             max_request_bytes=_env_int("BACKEND_MAX_REQUEST_BYTES", 1_048_576),
         )
 
