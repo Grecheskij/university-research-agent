@@ -61,6 +61,7 @@ class BaseResearchHTTPTool:
                 base_url=self.base_url,
                 headers=self._default_headers(),
                 timeout=self.settings.request_timeout,
+                trust_env=self.settings.http_trust_env,
             )
         return self._client
 

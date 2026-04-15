@@ -72,9 +72,11 @@ def build_review_tab(lang_selector: gr.Radio, backend_client: BackendClient, def
         fn=run_review,
         inputs=[lang_selector, query, identifiers],
         outputs=[review_output, papers_output, error_box],
+        queue=False,
     )
     lang_selector.change(
         fn=update_ui,
         inputs=[lang_selector],
         outputs=[header, query, identifiers, review_button, review_output, papers_output, error_box],
+        queue=False,
     )

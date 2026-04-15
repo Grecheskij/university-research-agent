@@ -77,9 +77,11 @@ def build_analytics_tab(lang_selector: gr.Radio, backend_client: BackendClient, 
         fn=run_analytics,
         inputs=[lang_selector, query, identifiers],
         outputs=[analytics_output, papers_output, error_box],
+        queue=False,
     )
     lang_selector.change(
         fn=update_ui,
         inputs=[lang_selector],
         outputs=[header, query, identifiers, analytics_button, analytics_output, papers_output, error_box],
+        queue=False,
     )

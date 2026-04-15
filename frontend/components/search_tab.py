@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import gradio as gr
@@ -9,6 +10,33 @@ import gradio as gr
 from frontend.backend_client import BackendClient, BackendClientError
 from frontend.formatters import format_papers_markdown, format_source_stats_markdown
 from frontend.i18n import Language, t
+
+_ALLOWED_SOURCES = {"semantic_scholar", "openalex", "crossref", "arxiv"}
+
+
+def _coerce_optional_int(value: object) -> int | None:
+    """Normalize optional numeric filters coming from Gradio inputs."""
+
+    if value is None:
+        return None
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            numeric = float(stripped)
+        except ValueError:
+            return None
+        if not math.isfinite(numeric):
+            return None
+        return int(numeric)
+    return None
 
 
 def build_search_tab(lang_selector: gr.Radio, backend_client: BackendClient, default_language: Language) -> None:
@@ -24,8 +52,8 @@ def build_search_tab(lang_selector: gr.Radio, backend_client: BackendClient, def
         )
         with gr.Column(scale=2):
             limit = gr.Slider(1, 10, value=10, step=1, label=t(default_language, "limit_label"))
-            year_from = gr.Number(label=t(default_language, "year_from_label"), precision=0)
-            year_to = gr.Number(label=t(default_language, "year_to_label"), precision=0)
+            year_from = gr.Number(label=t(default_language, "year_from_label"), precision=0, value=None)
+            year_to = gr.Number(label=t(default_language, "year_to_label"), precision=0, value=None)
             source = gr.Dropdown(
                 choices=[
                     (t(default_language, "source_any"), ""),
@@ -61,11 +89,13 @@ def build_search_tab(lang_selector: gr.Radio, backend_client: BackendClient, def
             "language": language,
             "limit": int(limit_value),
         }
-        if year_from_value is not None:
-            payload["year_from"] = int(year_from_value)
-        if year_to_value is not None:
-            payload["year_to"] = int(year_to_value)
-        if source_value:
+        year_from_clean = _coerce_optional_int(year_from_value)
+        year_to_clean = _coerce_optional_int(year_to_value)
+        if year_from_clean is not None:
+            payload["year_from"] = year_from_clean
+        if year_to_clean is not None:
+            payload["year_to"] = year_to_clean
+        if source_value in _ALLOWED_SOURCES:
             payload["source"] = source_value
         try:
             data = backend_client.search(payload)
@@ -86,8 +116,8 @@ def build_search_tab(lang_selector: gr.Radio, backend_client: BackendClient, def
             gr.update(value=f"## {t(language, 'search_title')}"),
             gr.update(label=t(language, "search_query_label"), placeholder=t(language, "search_query_placeholder")),
             gr.update(label=t(language, "limit_label")),
-            gr.update(label=t(language, "year_from_label")),
-            gr.update(label=t(language, "year_to_label")),
+            gr.update(label=t(language, "year_from_label"), value=None),
+            gr.update(label=t(language, "year_to_label"), value=None),
             gr.update(
                 label=t(language, "source_label"),
                 choices=[
@@ -108,9 +138,11 @@ def build_search_tab(lang_selector: gr.Radio, backend_client: BackendClient, def
         fn=run_search,
         inputs=[lang_selector, query, limit, year_from, year_to, source],
         outputs=[results, source_stats, error_box],
+        queue=False,
     )
     lang_selector.change(
         fn=update_ui,
         inputs=[lang_selector],
         outputs=[header, query, limit, year_from, year_to, source, search_button, results, source_stats, error_box],
+        queue=False,
     )

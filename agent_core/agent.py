@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Literal
+import logging
 import re
 
 from pydantic import BaseModel, Field
@@ -21,6 +22,7 @@ from data.vector_store.chroma_manager import ChromaManager
 
 AgentIntent = Literal["review", "summary", "bibliography"]
 _DOI_RE = re.compile(r"10\.\d{4,9}/\S+", re.IGNORECASE)
+LOGGER = logging.getLogger(__name__)
 
 
 class AgentResponse(BaseModel):
@@ -119,13 +121,17 @@ class ResearchAgent:
     async def close(self) -> None:
         """Close underlying HTTP clients."""
 
-        await asyncio.gather(
+        close_tasks = [
             self.semantic_scholar_tool.close(),
             self.openalex_tool.close(),
             self.crossref_tool.close(),
             self.arxiv_tool.close(),
             self.unpaywall_tool.close(),
-        )
+        ]
+        llm_close = getattr(self.llm, "aclose", None)
+        if callable(llm_close):
+            close_tasks.append(llm_close())
+        await asyncio.gather(*close_tasks)
 
     def _classify_intent(self, query: str) -> AgentIntent:
         lowered = query.lower()
@@ -159,7 +165,13 @@ class ResearchAgent:
 
     async def _safe_search(self, coroutine) -> list[Paper]:
         try:
-            return await coroutine
+            return await asyncio.wait_for(coroutine, timeout=self.settings.source_timeout)
+        except TimeoutError:
+            LOGGER.warning(
+                "Research source search timed out after %ss; skipping provider.",
+                self.settings.source_timeout,
+            )
+            return []
         except ResearchToolError:
             return []
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import logging
 
 from pydantic import BaseModel, Field
 
@@ -10,6 +11,8 @@ from agent_core.language import SupportedLanguage, resolve_language
 from agent_core.llm import extract_text
 from agent_core.prompts.analysis_prompt import get_summary_prompt
 from data.schemas.paper_schema import Paper
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SummaryResult(BaseModel):
@@ -73,15 +76,21 @@ class SummaryChain:
     ) -> str:
         prompt = get_summary_prompt(language)
         if self.llm is not None and prompt is not None:
-            prompt_value = prompt.invoke(
-                {
-                    "user_query": user_query,
-                    "papers_context": _papers_context(papers),
-                    "rag_context": _papers_context(rag_papers),
-                }
-            )
-            result = await self.llm.ainvoke(prompt_value.to_messages())
-            return extract_text(result)
+            try:
+                prompt_value = prompt.invoke(
+                    {
+                        "user_query": user_query,
+                        "papers_context": _papers_context(papers),
+                        "rag_context": _papers_context(rag_papers),
+                    }
+                )
+                result = await self.llm.ainvoke(prompt_value.to_messages())
+                return extract_text(result)
+            except Exception as exc:
+                LOGGER.warning(
+                    "Summary LLM synthesis failed; using deterministic fallback. error=%s",
+                    exc.__class__.__name__,
+                )
 
         if language == "ru":
             lead = (

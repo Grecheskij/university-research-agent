@@ -77,9 +77,11 @@ def build_bibliography_tab(lang_selector: gr.Radio, backend_client: BackendClien
         fn=run_bibliography,
         inputs=[lang_selector, query, identifiers],
         outputs=[apa_output, mla_output, gost_output, error_box],
+        queue=False,
     )
     lang_selector.change(
         fn=update_ui,
         inputs=[lang_selector],
         outputs=[header, query, identifiers, generate_button, apa_output, mla_output, gost_output, error_box],
+        queue=False,
     )

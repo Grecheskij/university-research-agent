@@ -13,6 +13,18 @@ class BackendClientError(RuntimeError):
     """Raised when the frontend cannot complete a backend request."""
 
 
+def resolve_backend_base_url() -> str:
+    """Resolve the backend base URL from explicit or host/port settings."""
+
+    explicit_url = os.getenv("BACKEND_BASE_URL")
+    if explicit_url:
+        return explicit_url.rstrip("/")
+
+    host = os.getenv("BACKEND_HOST", "localhost").strip() or "localhost"
+    port = os.getenv("BACKEND_PORT", "8000").strip() or "8000"
+    return f"http://{host}:{port}"
+
+
 @dataclass(slots=True)
 class BackendClient:
     """Thin wrapper over httpx for frontend-to-backend communication."""
@@ -79,7 +91,7 @@ def create_backend_client() -> BackendClient:
     """Create a backend client from environment variables."""
 
     return BackendClient(
-        base_url=os.getenv("BACKEND_BASE_URL", "http://localhost:8000"),
+        base_url=resolve_backend_base_url(),
         timeout=float(os.getenv("FRONTEND_HTTP_TIMEOUT", "30")),
         api_key=os.getenv("BACKEND_API_KEY") or os.getenv("API_KEY"),
     )

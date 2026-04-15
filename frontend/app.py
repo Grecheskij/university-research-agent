@@ -17,10 +17,10 @@ import gradio as gr
 import httpx
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(ROOT_DIR / ".env", override=True)
 
 from backend.api.main import create_app
-from frontend.backend_client import create_backend_client
+from frontend.backend_client import create_backend_client, resolve_backend_base_url
 from frontend.components.analytics_tab import build_analytics_tab
 from frontend.components.bibliography_tab import build_bibliography_tab
 from frontend.components.review_tab import build_review_tab
@@ -86,7 +86,7 @@ def _start_backend_server() -> None:
     if _BACKEND_THREAD_STARTED:
         return
 
-    backend_url = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
+    backend_url = resolve_backend_base_url()
     if not _should_autostart_backend() or not _is_local_backend_url(backend_url):
         return
 
@@ -174,6 +174,7 @@ def create_interface() -> gr.Blocks:
             fn=update_app_shell,
             inputs=[lang_selector],
             outputs=[title_markdown, lang_selector, backend_status],
+            queue=False,
         )
 
     demo.css = CUSTOM_CSS

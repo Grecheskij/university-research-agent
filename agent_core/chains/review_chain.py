@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from typing import Any
+import logging
 import re
 
 from pydantic import BaseModel, Field
@@ -12,6 +13,8 @@ from agent_core.language import SupportedLanguage, resolve_language
 from agent_core.llm import extract_text
 from agent_core.prompts.review_prompt import get_review_prompt
 from data.schemas.paper_schema import Paper
+
+LOGGER = logging.getLogger(__name__)
 
 _STOPWORDS = {
     "the",
@@ -107,15 +110,21 @@ class ReviewChain:
     ) -> str:
         prompt = get_review_prompt(language)
         if self.llm is not None and prompt is not None:
-            prompt_value = prompt.invoke(
-                {
-                    "user_query": user_query,
-                    "papers_context": _papers_context(papers),
-                    "rag_context": _papers_context(rag_papers),
-                }
-            )
-            result = await self.llm.ainvoke(prompt_value.to_messages())
-            return extract_text(result)
+            try:
+                prompt_value = prompt.invoke(
+                    {
+                        "user_query": user_query,
+                        "papers_context": _papers_context(papers),
+                        "rag_context": _papers_context(rag_papers),
+                    }
+                )
+                result = await self.llm.ainvoke(prompt_value.to_messages())
+                return extract_text(result)
+            except Exception as exc:
+                LOGGER.warning(
+                    "Review LLM synthesis failed; using deterministic fallback. error=%s",
+                    exc.__class__.__name__,
+                )
 
         if language == "ru":
             opening = (

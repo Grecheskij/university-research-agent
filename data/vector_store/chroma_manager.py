@@ -107,7 +107,15 @@ class ChromaManager:
             unique_papers[self._paper_key(paper)] = paper
 
         candidate_ids = list(unique_papers)
-        existing = self.collection.get(ids=candidate_ids)
+        try:
+            existing = self.collection.get(ids=candidate_ids)
+        except Exception as exc:
+            LOGGER.warning(
+                "Vector store get failed; switching to in-memory fallback. error=%s",
+                exc.__class__.__name__,
+            )
+            self._collection = InMemoryPaperCollection()
+            existing = self.collection.get(ids=candidate_ids)
         existing_ids = set(existing.get("ids", []))
         papers_to_store = {
             identifier: paper
@@ -125,16 +133,35 @@ class ChromaManager:
             documents.append(self._paper_document(paper))
             metadatas.append(self._paper_metadata(paper))
 
-        self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        try:
+            self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        except Exception as exc:
+            LOGGER.warning(
+                "Vector store add failed; switching to in-memory fallback. error=%s",
+                exc.__class__.__name__,
+            )
+            self._collection = InMemoryPaperCollection()
+            self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
         return ids
 
     def search(self, query: str, *, limit: int = 5) -> list[Paper]:
         """Query the vector store for relevant papers."""
 
-        results = self.collection.query(
-            query_texts=[query],
-            n_results=limit,
-        )
+        try:
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=limit,
+            )
+        except Exception as exc:
+            LOGGER.warning(
+                "Vector store query failed; switching to in-memory fallback. error=%s",
+                exc.__class__.__name__,
+            )
+            self._collection = InMemoryPaperCollection()
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=limit,
+            )
         metadatas = results.get("metadatas", [[]])
         if not metadatas or not metadatas[0]:
             return []
@@ -162,14 +189,22 @@ class ChromaManager:
 
         runtime_path = Path(self.settings.chroma_path)
         runtime_path.mkdir(parents=True, exist_ok=True)
-        self._client = self._client or chromadb.PersistentClient(path=str(runtime_path))
-        embedding_function = SentenceTransformerEmbeddingFunction(
-            model_name=self.settings.sentence_transformer_model
-        )
-        return self._client.get_or_create_collection(
-            name=self.settings.chroma_collection_name,
-            embedding_function=embedding_function,
-        )
+        try:
+            self._client = self._client or chromadb.PersistentClient(path=str(runtime_path))
+            embedding_function = SentenceTransformerEmbeddingFunction(
+                model_name=self.settings.sentence_transformer_model
+            )
+            return self._client.get_or_create_collection(
+                name=self.settings.chroma_collection_name,
+                embedding_function=embedding_function,
+            )
+        except Exception as exc:
+            LOGGER.warning(
+                "Chroma initialization failed; using in-memory vector store fallback. error=%s",
+                exc.__class__.__name__,
+            )
+            self._client = None
+            return InMemoryPaperCollection()
 
     def _paper_key(self, paper: Paper) -> str:
         """Return the deduplication key for a paper."""
@@ -193,7 +228,7 @@ class ChromaManager:
     def _paper_metadata(self, paper: Paper) -> dict[str, Any]:
         """Serialize paper metadata for Chroma storage."""
 
-        return {
+        metadata = {
             "paper_id": paper.id,
             "title": paper.title,
             "authors": " | ".join(paper.authors),
@@ -204,6 +239,11 @@ class ChromaManager:
             "url": paper.url,
             "pdf_url": paper.pdf_url,
             "open_access": paper.open_access,
+        }
+        return {
+            key: value
+            for key, value in metadata.items()
+            if value is not None
         }
 
     def _paper_from_metadata(self, metadata: dict[str, Any]) -> Paper:
